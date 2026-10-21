@@ -1,0 +1,77 @@
+# Infrastructure as Code: stack ทั้งหมดรันด้วยคำสั่งเดียว  ->  docker compose up -d
+# บริการ: ollama (โมเดลใน Docker) + ollama-init (โหลดโมเดลอัตโนมัติ)
+#         hermes-agent (agent) + web (หน้าเว็บแชต)
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11435:11434"        # 11435 เพื่อไม่ชนกับ Ollama ที่ติดตั้งบนเครื่อง (11434)
+    environment:
+      - OLLAMA_CONTEXT_LENGTH=8192
+      - OLLAMA_KEEP_ALIVE=30m
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  # โหลดโมเดลเข้า Ollama ใน Docker อัตโนมัติ แล้วสร้าง hermes-th จาก Modelfile
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - MODELS=hermes3:3b qwen2.5:3b
+    volumes:
+      - ./Modelfile:/Modelfile:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        for m in $$MODELS; do
+          echo "== pull $$m =="
+          until ollama pull $$m; do echo "retry..."; sleep 5; done
+        done
+        ollama create hermes-th -f /Modelfile
+        echo "== models ready =="
+        ollama list
+    restart: "no"
+
+  hermes-agent:
+    image: nousresearch/hermes-agent:latest
+    container_name: hermes-agent
+    depends_on:
+      ollama:
+        condition: service_healthy
+    command: gateway run
+    environment:
+      - API_SERVER_ENABLED=true
+      - OPENAI_BASE_URL=http://ollama:11434/v1
+      - OPENAI_API_KEY=ollama
+    ports:
+      - "8642:8642"          # Hermes API server
+    volumes:
+      - ./hermes-data:/opt/data   # config.yaml + ความจำของ agent
+    restart: unless-stopped
+
+  web:
+    image: nginx:alpine
+    container_name: hermes-web
+    depends_on:
+      - ollama
+    ports:
+      - "8080:80"
+    volumes:
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+
+volumes:
+  ollama_data:

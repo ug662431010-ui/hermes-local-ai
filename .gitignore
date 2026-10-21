@@ -1,0 +1,5 @@
+﻿hermes-data/
+.env
+.env.*
+!.env.example
+*.sock

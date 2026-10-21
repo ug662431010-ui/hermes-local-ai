@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hermes Chat</title>
+<style>
+  :root { --bg:#0f1420; --panel:#171e2e; --me:#2b5cff; --bot:#222b40; --text:#e8ecf5; --muted:#8a94ab; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, "Noto Sans Thai", sans-serif; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; }
+  header { display:flex; gap:12px; align-items:center; padding:12px 16px; background:var(--panel); border-bottom:1px solid #2a3350; }
+  header h1 { font-size:18px; margin:0; flex:1; }
+  select, button, textarea { font:inherit; color:var(--text); background:var(--bot); border:1px solid #2a3350; border-radius:8px; padding:8px 10px; }
+  button { cursor:pointer; background:var(--me); border:none; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  #chat { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:10px; }
+  .msg { max-width:80%; padding:10px 14px; border-radius:12px; white-space:pre-wrap; line-height:1.5; }
+  .user { align-self:flex-end; background:var(--me); }
+  .bot { align-self:flex-start; background:var(--bot); }
+  form { display:flex; gap:8px; padding:12px 16px; background:var(--panel); border-top:1px solid #2a3350; }
+  textarea { flex:1; resize:none; height:46px; }
+  #status { color:var(--muted); font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Hermes Chat</h1>
+  <span id="status">กำลังเชื่อมต่อ...</span>
+  <select id="model"></select>
+  <button id="clear" type="button">ล้างแชต</button>
+</header>
+<div id="chat"></div>
+<form id="form">
+  <textarea id="input" placeholder="พิมพ์ข้อความ แล้วกด Enter เพื่อส่ง (Shift+Enter ขึ้นบรรทัดใหม่)"></textarea>
+  <button id="send">ส่ง</button>
+</form>
+
+<script>
+const chat = document.getElementById("chat");
+const input = document.getElementById("input");
+const sendBtn = document.getElementById("send");
+const modelSel = document.getElementById("model");
+const statusEl = document.getElementById("status");
+let history = [];
+
+function addMsg(role, text) {
+  const d = document.createElement("div");
+  d.className = "msg " + (role === "user" ? "user" : "bot");
+  d.textContent = text;
+  chat.appendChild(d);
+  chat.scrollTop = chat.scrollHeight;
+  return d;
+}
+
+async function loadModels() {
+  try {
+    const r = await fetch("/api/tags");
+    const data = await r.json();
+    modelSel.innerHTML = "";
+    data.models.forEach(m => {
+      const o = document.createElement("option");
+      o.value = o.textContent = m.name;
+      modelSel.appendChild(o);
+    });
+    const preferred = [...modelSel.options].find(o => o.value.startsWith("hermes-th"))
+                   || [...modelSel.options].find(o => o.value.startsWith("hermes"));
+    if (preferred) modelSel.value = preferred.value;
+    statusEl.textContent = data.models.length ? "เชื่อมต่อ Ollama แล้ว" : "ยังไม่มีโมเดล (รัน ollama pull hermes3)";
+  } catch (e) {
+    statusEl.textContent = "เชื่อมต่อ Ollama ไม่ได้";
+  }
+}
+
+async function send() {
+  const text = input.value.trim();
+  if (!text || !modelSel.value) return;
+  input.value = "";
+  sendBtn.disabled = true;
+  addMsg("user", text);
+  history.push({ role: "user", content: text });
+  const bubble = addMsg("bot", "...");
+  let full = "";
+  try {
+    const r = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: modelSel.value, messages: history, stream: true })
+    });
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const j = JSON.parse(line);
+        if (j.message?.content) {
+          full += j.message.content;
+          bubble.textContent = full;
+          chat.scrollTop = chat.scrollHeight;
+        }
+      }
+    }
+    history.push({ role: "assistant", content: full });
+  } catch (e) {
+    bubble.textContent = "เกิดข้อผิดพลาด: " + e.message;
+  }
+  sendBtn.disabled = false;
+  input.focus();
+}
+
+document.getElementById("form").addEventListener("submit", e => { e.preventDefault(); send(); });
+input.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+});
+document.getElementById("clear").onclick = () => { history = []; chat.innerHTML = ""; };
+loadModels();
+</script>
+</body>
+</html>
