@@ -132,6 +132,8 @@ Hermes Agent requires a context window of at least 64,000 tokens, so the Ollama 
 
 ```
 hermes-web/
+├── images/
+│   └── hermes-chat.png  #screenshots chat
 ├── docker-compose.yml   # IaC: defines every service
 ├── Modelfile            # customizes the hermes-th model
 ├── nginx.conf           # proxies the web UI to Ollama
@@ -141,3 +143,4 @@ hermes-web/
 ├── README.md            # Thai documentation
 └── README.en.md         # English documentation
 ```
+## Ollama running in Docker and Ollama running directly on the machine both use the CPU. The difference is that Docker makes the setup reproducible, with no need to reconfigure a new machine, and lets the system be described as code (IaC). ##
