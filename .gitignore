@@ -1,4 +1,6 @@
-﻿hermes-data/
+﻿hermes-data/*
+!hermes-data/image/
+!hermes-data/image/**
 .env
 .env.*
 !.env.example
