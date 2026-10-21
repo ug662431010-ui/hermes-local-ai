@@ -2,8 +2,6 @@
 
 A fully local AI agent stack (no external APIs). It combines language models installed inside Docker, the Hermes Agent, and a web chat interface. Everything is defined as Infrastructure as Code (`docker-compose.yml`) and starts with a single command.
 
-Thai version: [README.md](README.md)
-
 ## 1. Problem and Approach
 
 - **Problem:** We want an AI agent that runs on our own machine, keeps data local, and can be reproduced easily on another computer.
